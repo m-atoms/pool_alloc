@@ -29,6 +29,14 @@ void* pool_malloc(size_t n);
 // Release allocation pointed to by ptr.
 void pool_free(void* ptr);
 
-void pool_print(void);
+// accept pointer to header, returns pointer to data (for malloc)
+uint8_t* blk_hdr_to_data(uint8_t* ptr);
+
+// accept pointer to data, returns pointer to header (for free)
+uint8_t* blk_data_to_hdr(uint8_t* ptr);
+
+void heap_print(void);
+
+void pool_print(uint8_t pool);
 
 #endif // __POOL_ALLOC_H__

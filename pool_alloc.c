@@ -197,7 +197,21 @@ void pool_free(void* ptr)
  // Implement me!
 }
 
-void pool_print() {
+uint8_t* blk_hdr_to_data(uint8_t* ptr) {
+    //printf("ptr htd: %p\n", ptr);
+    //printf("sizeof:  %d\n", sizeof(uint8_t*));
+    //printf("add:     %p\n", ptr += sizeof(uint8_t*));
+    return (ptr == NULL ? NULL : (ptr += sizeof(uint8_t*)));
+}
+
+uint8_t* blk_data_to_hdr(uint8_t* ptr) {
+    //printf("ptr dth: %p\n", ptr);
+    //printf("sizeof:  %d\n", sizeof(uint8_t*));
+    //printf("sub:     %p\n", ptr -= sizeof(uint8_t*));
+    return (ptr == NULL ? NULL : (ptr -= sizeof(uint8_t*)));
+}
+
+void heap_print() {
     printf("+-----------------------------------------------------+\n");
     printf("|                  heap data header                   |\n");
     printf("+-----------------------------------------------------+\n");
@@ -259,16 +273,20 @@ void pool_print() {
     }
 }
 
+void pool_print(uint8_t pool) {
+    /* traverse each pool list to find each block */
+    uint8_t* blk = NULL;
+    printf("------- POOL[%u] -------\n", pool);
+    printf("blk_szs[%d]:         [addr: %p] [val: %d] \n", pool, &blk_szs[pool], blk_szs[pool]);
+    printf("pool_base_addrs[%d]: [addr: %p] [val: %p]\n", pool, &pool_base_addrs[pool], pool_base_addrs[pool]);
+    printf("block mem req: %ld\n", blk_szs[pool] + sizeof(uint8_t*));
+    blk = pool_base_addrs[pool];
 
-
-
-
-
-
-
-
-
-
-
-
-
+    uint16_t blks = 0;
+    while (blk != NULL) {
+        printf("blk[%u]: [addr: %p] [*brk[%u]: %p] [delta val: %lu]\n", blks, blk, blks, *((uint8_t**)blk), *((uint8_t**)blk) - blk);
+        blk = *((uint8_t**)blk);
+        blks++;
+    }
+    printf("\n");
+}
