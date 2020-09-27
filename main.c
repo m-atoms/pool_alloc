@@ -9,10 +9,12 @@ int main() {
     
     bool result = false;
     //size_t blk_szs[] = {32, 16, 128, 512, 1024};
-    size_t blk_szs[] = {4096, 4096, 4096, 4096, 4096};
+    size_t blk_szs[] = {2048, 4096, 2048, 1000, 4000};
     size_t blk_sz_cnt = 5;
 
     result = pool_init(blk_szs, blk_sz_cnt);
     printf("%s\n", result ? "true" : "false");
+
+    pool_print();
     return 0;
 }
