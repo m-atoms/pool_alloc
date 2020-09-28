@@ -1,8 +1,26 @@
-# pool_alloc
-Tunable Block Pool Allocator
+# pool_alloc: Tunable Block Pool Allocator
 
-## Overview
+## Introduction
+This allocator is optimzied for allocating objects of specific sizes which are known at initialization time. The allocator is configured by the user with the set of block sizes that are appropriate for the application. Internally, the allocator creates block pools for each of the specified sizes.
+
 ## Usage
+**Build Options**
+
+By default, the Makefile passes two predefined macros into the test application
+* VERBOSE - print test info and operation results
+* FUNCTIONAL_TEST - perform more detailed test with step-by-step explanations
+
+If removed, the test application will print only final success/failure result
+
+**Build**
+```bash
+make all
+```
+**Execute**
+```bash
+./pool_test
+```
+
 ## Design
 ## Constraints
 ## Tradeoffs
