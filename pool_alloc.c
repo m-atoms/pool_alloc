@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <assert.h> //test cases
+#include <assert.h> // internal sanity checks
 
 #include "pool_alloc.h"
 
@@ -17,13 +17,15 @@ static uint8_t g_pool_heap[65536];
 static bool g_pool_heap_init = false;
 static uint8_t* g_pool_heap_max = g_pool_heap + sizeof(g_pool_heap);
 
-static uint8_t blk_sz_cnt = 0;
-static uint16_t* blk_szs; // stores block_sizes array
-static uint8_t** pool_base_addrs; // stores base addresses of pools
-static uint8_t** blk_alloc; // stores next block address to be allocated
+static uint8_t blk_sz_cnt = 0;    // # of block sizes = # of pools
+static uint16_t* blk_szs;         // block_sizes array
+static uint8_t** pool_base_addrs; // base addresses of pools
+static uint8_t** blk_alloc;       // next block address to be allocated
 
 bool pool_init(const size_t* block_sizes, size_t block_size_count)
 {
+    /******* verify pool state and args *******/
+
     /* verify pool not already init */
     if (g_pool_heap_init) {
         printf("ERROR: pool already init\n");
@@ -50,136 +52,96 @@ bool pool_init(const size_t* block_sizes, size_t block_size_count)
         }
     }
 
-    /*********************************************
-     * init heap data management 
-     ********************************************/
+    /******* init heap management data *******/
 
     /* write block sizes into beginning of g_pool_heap */
-    // TODO: explain dont need to store this as size_t which is huge (8B on 64bit machine)
-    blk_sz_cnt = block_size_count;
     uint8_t* brk = g_pool_heap;
     blk_szs = (uint16_t*)brk;
-
-    printf("g_pool_heap: %p\n", g_pool_heap);
-    printf("blk_szs:     %p\n", blk_szs);
-    printf("brk:         %p\n", brk);
-    printf("bytes used:  %ld\n", brk - g_pool_heap);
-    printf("\n");
+    blk_sz_cnt = block_size_count;
 
     for (uint8_t i = 0; i < blk_sz_cnt; i++) {
         *((uint16_t*)brk) = (uint16_t)(block_sizes[i]);
         brk += sizeof(uint16_t);
-        //printf("bytes used: %ld\n", brk - g_pool_heap);
     }
-
-    /* init heap management data at beginning of heap */
-    printf("g_pool_heap: %p\n", g_pool_heap);
-    printf("blk_szs:     %p\n", blk_szs);
-    printf("brk:         %p\n", brk);
-    printf("bytes used:  %ld\n", brk - g_pool_heap);
-    printf("\n");
-
-    //printf("blk_szs size: %ld\n", brk - g_pool_heap);
-    //for (uint8_t i = 0; i < blk_sz_cnt; i++) {
-    //    printf("blk_szs{%d]: %p\n",i, &blk_szs[i]);
-    //    printf("blk_szs[%d]: %d\n",i, blk_szs[i]);
-    //}
 
     /* reserve space for pool base address pointers */
     pool_base_addrs = (uint8_t**)brk;
     brk += blk_sz_cnt * sizeof(uint8_t*);
-
-    printf("g_pool_heap: %p\n", g_pool_heap);
-    printf("blk_szs:     %p\n", blk_szs);
-    printf("pool_bs_add: %p\n", pool_base_addrs);
-    printf("brk:         %p\n", brk);
-    printf("bytes used:  %ld\n", brk - g_pool_heap);
-    printf("\n");
     
-    /* reserve space for pool base address pointers */
+    /* reserve space for pool next block allocation address pointers */
     blk_alloc = (uint8_t**)brk;
     brk += blk_sz_cnt * sizeof(uint8_t*);
 
-    printf("g_pool_heap: %p\n", g_pool_heap);
-    printf("blk_szs:     %p\n", blk_szs);
-    printf("pool_bs_add: %p\n", pool_base_addrs);
-    printf("blk_alloc:   %p\n", blk_alloc);
-    printf("brk:         %p\n", brk);
-    printf("bytes used:  %ld\n", brk - g_pool_heap);
-    printf("\n");
-
-    /* compute bytes available after reserving heap memory management */
-    uint16_t bytes_free = sizeof(g_pool_heap) - (brk - g_pool_heap);
-    printf("bytes [total: %ld] [free: %d] [used: %ld]\n", bytes_free + (brk - g_pool_heap), bytes_free, brk - g_pool_heap);
-
+    /* compute bytes available after reserving heap memory management and find pool size */
+    uint16_t heap_mgmt_size = brk - g_pool_heap;
+    uint16_t bytes_free = sizeof(g_pool_heap) - heap_mgmt_size;
     uint16_t pool_size = bytes_free / block_size_count;
-    printf("heap partitions: %d\n", pool_size);
-    printf("heap remainder: %ld\n", bytes_free % block_size_count);
+    uint16_t heap_remainder = bytes_free % blk_sz_cnt;
+
+    /* verify heap mgmnt + size of each pool * m pools + remainder (if any) == total heap size */
+    assert(sizeof(g_pool_heap) == (heap_mgmt_size + (pool_size * blk_sz_cnt) + heap_remainder));
+
+//#ifdef VERBOSE
+    printf("-- HEAP --\n");
+    printf("full heap size: %lu bytes\n", sizeof(g_pool_heap));
+    printf("heap mgmt size: %u bytes\n", heap_mgmt_size);
+    printf("heap pool size: %u bytes\n", bytes_free);
+    printf("each pool size: %u bytes\n", pool_size);
+    printf("heap remainder: %u bytes\n", heap_remainder);
+//#endif
+
+    /******* create pools and init blocks *******/
 
     /* compute and assign pool_base_addrs */
-    /* note: at this point brk is after next_alloc which should be pool_base_addr[0] */
-    /* note: we can also init blk_alloc because the first portion of each blk is ptr */
+    /* note: on first itr, brk is after end of blk_alloc which is pool_base_addr[0] */
+    /* note: also init blk_alloc because the first blk of each pool init to pool_base_addr[i] */
     for (uint8_t i = 0; i < blk_sz_cnt; i++) {
-        printf("pool_bases_addrs: %p\n", pool_base_addrs[i]);
-        printf("blk_alloc:        %p\n", blk_alloc[i]);
         pool_base_addrs[i] = (uint8_t*)brk + (pool_size * i);
         blk_alloc[i] = pool_base_addrs[i];
-        printf("pool_bases_addrs: %p\n", pool_base_addrs[i]);
-        printf("blk_alloc:        %p\n", blk_alloc[i]);
     }
-    printf("\n");
 
-    /* calculate number of blocks that can fit in each pool */
-    /* note: memory size for each block sizeof(uint8_t*) + blk_szs[i] */
+    /* calculate number of blocks that can fit in each pool, then init free list ptr links */
     uint16_t blk_mem_req = 0;
     uint16_t pool_blks = 0;
     uint16_t bytes_remainder = 0;
     for (uint8_t i = 0; i < blk_sz_cnt; i++) {
-        printf("blk_szs[%d]: %d\n", i, blk_szs[i]);
+        /* mem requirement for each block = sizeof(uint8_t*) + blk_szs[i] */
         blk_mem_req = blk_szs[i] + sizeof(uint8_t*);
-        printf("blk_mem_req: %d\n", blk_mem_req);
+
         pool_blks = pool_size / blk_mem_req; 
         bytes_remainder = pool_size % blk_mem_req;
+
+        /* verify number of blocks * block memory + remainder bytes == pool size */
+        assert(pool_size == (blk_mem_req * pool_blks + bytes_remainder));
+
+//#ifdef VERBOSE
+        printf("\n-- POOL[%d] --\n", i);
+        printf("blk_szs[%d]:  %d\n", i, blk_szs[i]);
+        printf("blk_mem_req: %d\n", blk_mem_req);
         printf("pool_blks:   %d\n", pool_blks);
         printf("bytes_rmdr:  %d\n", bytes_remainder);
-        printf("req*blks+rmd:%d\n", blk_mem_req * pool_blks + bytes_remainder);
+//#endif
 
-        assert(pool_base_addrs[i] == brk);
-
-        printf("pool_bs_add: %p\n", pool_base_addrs[i]);
-        printf("brk:         %p\n", brk);
-        uint8_t* temp;
-        /* create next ptr links */
-        /* loop one short of pool_blks bc last blk needs to point to null - we'll do it manually */
+        /* init pointer at header of each block to 'next' block in order to create free list */
         for (uint16_t j = 0; j < (pool_blks - 1); j++) {
-            /* cast brk to uint8_t prt and deref, assign to brk + sizeof(uint8_t*) + blk_sz[i] */
-            printf("brk:         %p\n", brk);
-            temp = brk;
+
+            /* set current blk header = next blk addr */
             *((uint8_t**)brk) = brk + sizeof(uint8_t*) + blk_szs[i];
-            printf("brk:         %p\n", brk);
-            printf("*brk:         %p\n", *((uint8_t**)brk));
+
+            /* increment brk by total block mem requirement */
             brk += sizeof(uint8_t*) + blk_szs[i];
-            printf("brk:         %p\n", brk);
-            printf("size:       %ld\n", brk - temp);
         }
 
-        /* do last block manually */
+        /* set last block 'next' ptr to NULL */
         *((uint8_t**)brk) = NULL;
-        printf("*brk:         %p\n", *((uint8_t**)brk));
         brk += sizeof(uint8_t*) + blk_szs[i];
-        printf("brk:         %p\n", brk);
 
+        /* add remaining bytes to get to next pool_base_addr */
         brk += bytes_remainder;
-        printf("brk:         %p\n", brk);
-        printf("pool_bases_addrs: %p\n", pool_base_addrs[i]);
-        printf("\n");
     }
 
+    /* no byte left behind */
     assert((brk + (bytes_free % block_size_count)) - g_pool_heap == sizeof(g_pool_heap));
-    printf("brk:         %p\n", brk);
-    printf("heap remainder: %ld\n", bytes_free % block_size_count);
-    printf("total: %p\n", brk + (bytes_free % block_size_count));
-    printf("net: %lu\n", (brk + (bytes_free % block_size_count)) - g_pool_heap);
 
     /* heap init complete */
     g_pool_heap_init = true;
@@ -189,6 +151,8 @@ bool pool_init(const size_t* block_sizes, size_t block_size_count)
 
 void* pool_malloc(size_t n)
 {
+    /******* verify pool state and args *******/
+
     /* verify pool already init */
     if (!g_pool_heap_init) {
         printf("ERROR: pool not init\n");
@@ -213,20 +177,22 @@ void* pool_malloc(size_t n)
         return NULL;
     }
 
+    /******* allocate block and identify next block to be allocated *******/
+
     /* allocate free block */
     uint8_t* blk = blk_alloc[pool];
-
-    /* set pointer to NULL since no longer free */
-    //*((uint8_t**)blk) = NULL;
 
     /* bump next blk alloc */
     blk_alloc[pool] = *((uint8_t**)blk_alloc[pool]);
 
+    /* convert block header ptr to block data ptr */
     return (void*)blk_hdr_to_data(blk);
 }
 
 void pool_free(void* ptr)
 {
+    /******* verify pool state and args *******/
+
     /* verify pool already init */
     if (!g_pool_heap_init) {
         printf("ERROR: pool not init\n");
@@ -267,9 +233,7 @@ void pool_free(void* ptr)
 
     /* verify block is not already freed by walking free list */
     uint8_t* blk = NULL;
-    printf("blk: %p\n", blk);
     blk = blk_alloc[pool];
-    printf("blk: %p\n", blk);
     while (blk != NULL) {
         if (blk == hdr_ptr) {
             printf("ERROR: block already free\n");
@@ -278,7 +242,7 @@ void pool_free(void* ptr)
         blk = *((uint8_t**)blk);
     }
 
-    /* free block */
+    /******* free block and add to front of block alloc list *******/
 
     /* assign block hdr ptr to current first in free list */
     *((uint8_t**)hdr_ptr) = blk_alloc[pool];
@@ -299,7 +263,7 @@ uint8_t* blk_data_to_hdr(uint8_t* ptr) {
 
 void heap_print() {
     printf("+-----------------------------------------------------+\n");
-    printf("|                  heap data header                   |\n");
+    printf("|                  heap mgmt data                     |\n");
     printf("+-----------------------------------------------------+\n");
 
     /* check that blk_szs array starts at heap start */
@@ -341,21 +305,8 @@ void heap_print() {
     printf("+-----------------------------------------------------+\n");
 
     /* traverse each pool list to find each block */
-    uint8_t* blk = NULL;
     for (uint8_t i = 0; i < blk_sz_cnt; i++) {
-        printf("------- POOL[%u] -------\n", i);
-        printf("blk_szs[%d]:         [addr: %p] [val: %d] \n", i, &blk_szs[i], blk_szs[i]);
-        printf("pool_base_addrs[%d]: [addr: %p] [val: %p]\n", i, &pool_base_addrs[i], pool_base_addrs[i]);
-        printf("block mem req: %ld\n", blk_szs[i] + sizeof(uint8_t*));
-        blk = pool_base_addrs[i];
-
-        uint16_t blks = 0;
-        while (blk != NULL) {
-            printf("blk[%u]: [addr: %p] [*blk[%u]: %p] [delta val: %lu]\n", blks, blk, blks, *((uint8_t**)blk), *((uint8_t**)blk) - blk);
-            blk = *((uint8_t**)blk);
-            blks++;
-        }
-        printf("\n");
+        pool_print(i);
     }
 }
 
@@ -372,7 +323,7 @@ void pool_print(uint8_t pool) {
     printf("------- BLOCKS -------\n");
     uint16_t blks = 0;
     while (blk != NULL) {
-        printf("blk[%u]: [addr: %p] [*blk[%u]: %p] [delta val: %lu]\n", blks, blk, blks, *((uint8_t**)blk), *((uint8_t**)blk) - blk);
+        printf("blk[%u]: [addr: %p] [*blk[%u]: %p] [delta val: %ld]\n", blks, blk, blks, *((uint8_t**)blk), *((uint8_t**)blk) - blk);
         blk = *((uint8_t**)blk);
         blks++;
     }
