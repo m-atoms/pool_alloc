@@ -15,6 +15,7 @@
 
 static uint8_t g_pool_heap[65536];
 static bool g_pool_heap_init = false;
+static uint8_t* g_pool_heap_max = g_pool_heap + sizeof(g_pool_heap);
 
 static uint8_t blk_sz_cnt = 0;
 static uint16_t* blk_szs; // stores block_sizes array
@@ -226,7 +227,66 @@ void* pool_malloc(size_t n)
 
 void pool_free(void* ptr)
 {
- // Implement me!
+    /* verify pool already init */
+    if (!g_pool_heap_init) {
+        printf("ERROR: pool not init\n");
+        return;
+    }
+
+    /* verify pointer not NULL */
+    if (ptr == NULL) {
+        printf("ERROR: cannot free NULL ptr\n");
+        return;
+    }
+
+    /* verify pointer within valid boundary pool_base_addr[0] and max_heap pointer */
+    if ((uint8_t*)ptr < pool_base_addrs[0] || (uint8_t*)ptr > g_pool_heap_max) {
+        printf("ERROR: ptr not within valid heap boundaries\n");
+        return;
+    }
+
+    /* find pool */
+    uint8_t pool = -1;
+    for (uint8_t i = 0; i < (blk_sz_cnt - 1); i++) {
+        if ((uint8_t*)ptr >= pool_base_addrs[i] && (uint8_t*)ptr <= pool_base_addrs[i+1]) {
+            pool = i;
+        }
+        else {
+            pool = i+1;
+        }
+    }
+
+    /* convert ptr from data to header */
+    uint8_t* hdr_ptr = blk_data_to_hdr((uint8_t*)ptr);
+
+    /* verify ptr is aligned with blocks in pool otherwise invalid pointer */
+    if (((hdr_ptr - pool_base_addrs[pool]) % (blk_szs[pool] + sizeof(uint8_t*))) != 0) {
+        printf("ERROR: unaligned block pointer\n");
+        return;
+    }
+
+    /* verify block is not already freed by walking free list */
+    uint8_t* blk = NULL;
+    printf("blk: %p\n", blk);
+    blk = blk_alloc[pool];
+    printf("blk: %p\n", blk);
+    while (blk != NULL) {
+        if (blk == hdr_ptr) {
+            printf("ERROR: block already free\n");
+            return;
+        }
+        blk = *((uint8_t**)blk);
+    }
+
+    /* free block */
+
+    /* assign block hdr ptr to current first in free list */
+    *((uint8_t**)hdr_ptr) = blk_alloc[pool];
+
+    /* insert freed block at front of free list */
+    blk_alloc[pool] = hdr_ptr;
+
+    return;
 }
 
 uint8_t* blk_hdr_to_data(uint8_t* ptr) {
