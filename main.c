@@ -26,5 +26,22 @@ int main() {
     /* test heap */
     //heap_print();
     //pool_print(4);
+
+    /* test pool_alloc */
+    pool_print(4);
+    void* blk0 = NULL;
+    void* blk1 = NULL;
+    void* blk2 = NULL;
+    void* blk3 = NULL;
+    blk0 = pool_malloc(3333);
+    pool_print(4);
+    blk1 = pool_malloc(3333);
+    pool_print(4);
+    blk2 = pool_malloc(3333);
+    pool_print(4);
+    blk3 = pool_malloc(3333);
+    pool_print(4);
+    //printf("blk hdr:  %p\n", blk_data_to_hdr(blk));
+    //printf("blk data: %p\n\n", blk);
     return 0;
 }

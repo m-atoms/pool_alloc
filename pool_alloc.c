@@ -188,8 +188,40 @@ bool pool_init(const size_t* block_sizes, size_t block_size_count)
 
 void* pool_malloc(size_t n)
 {
- // Implement me!
- return NULL;
+    /* verify pool already init */
+    if (!g_pool_heap_init) {
+        printf("ERROR: pool not init\n");
+        return NULL;
+    }
+
+    /* verify selected block size is valid and if so, find index */
+    int8_t pool = -1;
+    for (uint8_t i = 0; i < blk_sz_cnt; i++) {
+        if (blk_szs[i] == n)
+            pool = i;
+    }
+
+    if (pool == -1) {
+        printf("ERROR: invalid block size\n");
+        return NULL;
+    }
+
+    /* check if pool has available blocks */
+    if (blk_alloc[pool] == NULL) {
+        printf("ERROR: no block available\n");
+        return NULL;
+    }
+
+    /* allocate free block */
+    uint8_t* blk = blk_alloc[pool];
+
+    /* set pointer to NULL since no longer free */
+    //*((uint8_t**)blk) = NULL;
+
+    /* bump next blk alloc */
+    blk_alloc[pool] = *((uint8_t**)blk_alloc[pool]);
+
+    return (void*)blk_hdr_to_data(blk);
 }
 
 void pool_free(void* ptr)
@@ -198,16 +230,10 @@ void pool_free(void* ptr)
 }
 
 uint8_t* blk_hdr_to_data(uint8_t* ptr) {
-    //printf("ptr htd: %p\n", ptr);
-    //printf("sizeof:  %d\n", sizeof(uint8_t*));
-    //printf("add:     %p\n", ptr += sizeof(uint8_t*));
     return (ptr == NULL ? NULL : (ptr += sizeof(uint8_t*)));
 }
 
 uint8_t* blk_data_to_hdr(uint8_t* ptr) {
-    //printf("ptr dth: %p\n", ptr);
-    //printf("sizeof:  %d\n", sizeof(uint8_t*));
-    //printf("sub:     %p\n", ptr -= sizeof(uint8_t*));
     return (ptr == NULL ? NULL : (ptr -= sizeof(uint8_t*)));
 }
 
@@ -265,7 +291,7 @@ void heap_print() {
 
         uint16_t blks = 0;
         while (blk != NULL) {
-            printf("blk[%u]: [addr: %p] [*brk[%u]: %p] [delta val: %lu]\n", blks, blk, blks, *((uint8_t**)blk), *((uint8_t**)blk) - blk);
+            printf("blk[%u]: [addr: %p] [*blk[%u]: %p] [delta val: %lu]\n", blks, blk, blks, *((uint8_t**)blk), *((uint8_t**)blk) - blk);
             blk = *((uint8_t**)blk);
             blks++;
         }
@@ -279,12 +305,14 @@ void pool_print(uint8_t pool) {
     printf("------- POOL[%u] -------\n", pool);
     printf("blk_szs[%d]:         [addr: %p] [val: %d] \n", pool, &blk_szs[pool], blk_szs[pool]);
     printf("pool_base_addrs[%d]: [addr: %p] [val: %p]\n", pool, &pool_base_addrs[pool], pool_base_addrs[pool]);
+    printf("blk_alloc[%d]:       [addr: %p] [val: %p]\n", pool, &blk_alloc[pool], blk_alloc[pool]);
     printf("block mem req: %ld\n", blk_szs[pool] + sizeof(uint8_t*));
-    blk = pool_base_addrs[pool];
+    blk = blk_alloc[pool];
 
+    printf("------- BLOCKS -------\n");
     uint16_t blks = 0;
     while (blk != NULL) {
-        printf("blk[%u]: [addr: %p] [*brk[%u]: %p] [delta val: %lu]\n", blks, blk, blks, *((uint8_t**)blk), *((uint8_t**)blk) - blk);
+        printf("blk[%u]: [addr: %p] [*blk[%u]: %p] [delta val: %lu]\n", blks, blk, blks, *((uint8_t**)blk), *((uint8_t**)blk) - blk);
         blk = *((uint8_t**)blk);
         blks++;
     }
