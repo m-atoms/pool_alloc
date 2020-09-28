@@ -260,6 +260,7 @@ void pool_free(void* ptr)
         if (blk == hdr_ptr) {
 #ifdef VERBOSE
             printf("ERROR: block already free\n");
+#endif
             return;
         }
         blk = *((uint8_t**)blk);
