@@ -28,26 +28,34 @@ bool pool_init(const size_t* block_sizes, size_t block_size_count)
 
     /* verify pool not already init */
     if (g_pool_heap_init) {
+#ifdef VERBOSE
         printf("ERROR: pool already init\n");
+#endif
         return false;
     }
 
     /* verify valid number of pools */ 
     if (block_size_count < MIN_POOLS || block_size_count > MAX_POOLS) {
+#ifdef VERBOSE
         printf("ERROR: invalid number of pools\n");
+#endif
         return false;
     }
     
     /* verify valid block sizes array */
     if (block_sizes == NULL) {
+#ifdef VERBOSE
         printf("ERROR: invalid block_size array\n");
+#endif
         return false;
     }
 
     /* verify valid block sizes */
     for (uint8_t i = 0; i < block_size_count; i++) {
         if (block_sizes[i] < MIN_BLOCK_SIZE || block_sizes[i] > MAX_BLOCK_SIZE) {
+#ifdef VERBOSE
             printf("ERROR: invalid block size\n");
+#endif
             return false;
         }
     }
@@ -81,14 +89,14 @@ bool pool_init(const size_t* block_sizes, size_t block_size_count)
     /* verify heap mgmnt + size of each pool * m pools + remainder (if any) == total heap size */
     assert(sizeof(g_pool_heap) == (heap_mgmt_size + (pool_size * blk_sz_cnt) + heap_remainder));
 
-//#ifdef VERBOSE
+#ifdef VERBOSE
     printf("-- HEAP --\n");
     printf("full heap size: %lu bytes\n", sizeof(g_pool_heap));
     printf("heap mgmt size: %u bytes\n", heap_mgmt_size);
     printf("heap pool size: %u bytes\n", bytes_free);
     printf("each pool size: %u bytes\n", pool_size);
     printf("heap remainder: %u bytes\n", heap_remainder);
-//#endif
+#endif
 
     /******* create pools and init blocks *******/
 
@@ -114,13 +122,13 @@ bool pool_init(const size_t* block_sizes, size_t block_size_count)
         /* verify number of blocks * block memory + remainder bytes == pool size */
         assert(pool_size == (blk_mem_req * pool_blks + bytes_remainder));
 
-//#ifdef VERBOSE
+#ifdef VERBOSE
         printf("\n-- POOL[%d] --\n", i);
         printf("blk_szs[%d]:  %d\n", i, blk_szs[i]);
         printf("blk_mem_req: %d\n", blk_mem_req);
         printf("pool_blks:   %d\n", pool_blks);
         printf("bytes_rmdr:  %d\n", bytes_remainder);
-//#endif
+#endif
 
         /* init pointer at header of each block to 'next' block in order to create free list */
         for (uint16_t j = 0; j < (pool_blks - 1); j++) {
@@ -155,7 +163,9 @@ void* pool_malloc(size_t n)
 
     /* verify pool already init */
     if (!g_pool_heap_init) {
+#ifdef VERBOSE
         printf("ERROR: pool not init\n");
+#endif
         return NULL;
     }
 
@@ -167,13 +177,17 @@ void* pool_malloc(size_t n)
     }
 
     if (pool == -1) {
+#ifdef VERBOSE
         printf("ERROR: invalid block size\n");
+#endif
         return NULL;
     }
 
     /* check if pool has available blocks */
     if (blk_alloc[pool] == NULL) {
+#ifdef VERBOSE
         printf("ERROR: no block available\n");
+#endif
         return NULL;
     }
 
@@ -195,19 +209,25 @@ void pool_free(void* ptr)
 
     /* verify pool already init */
     if (!g_pool_heap_init) {
+#ifdef VERBOSE
         printf("ERROR: pool not init\n");
+#endif
         return;
     }
 
     /* verify pointer not NULL */
     if (ptr == NULL) {
+#ifdef VERBOSE
         printf("ERROR: cannot free NULL ptr\n");
+#endif
         return;
     }
 
     /* verify pointer within valid boundary pool_base_addr[0] and max_heap pointer */
     if ((uint8_t*)ptr < pool_base_addrs[0] || (uint8_t*)ptr > g_pool_heap_max) {
+#ifdef VERBOSE
         printf("ERROR: ptr not within valid heap boundaries\n");
+#endif
         return;
     }
 
@@ -227,7 +247,9 @@ void pool_free(void* ptr)
 
     /* verify ptr is aligned with blocks in pool otherwise invalid pointer */
     if (((hdr_ptr - pool_base_addrs[pool]) % (blk_szs[pool] + sizeof(uint8_t*))) != 0) {
+#ifdef VERBOSE
         printf("ERROR: unaligned block pointer\n");
+#endif
         return;
     }
 
@@ -236,6 +258,7 @@ void pool_free(void* ptr)
     blk = blk_alloc[pool];
     while (blk != NULL) {
         if (blk == hdr_ptr) {
+#ifdef VERBOSE
             printf("ERROR: block already free\n");
             return;
         }
